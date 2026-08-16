@@ -11,6 +11,8 @@ requires-python = ">=3.10,<3.11"
 dependencies = [
     "paddlepaddle==2.6.2",
     "paddleocr==2.8.1",
+    "opencv-python==4.11.0.86",
+    "setuptools>=68",
     "openpyxl>=3.1.0",
     "python-dotenv>=1.0.0",
     "openai>=1.0.0",
@@ -24,6 +26,12 @@ dev = [
 [tool.uv]
 # 扁平脚本项目，不需要把本项目作为包安装，只管理依赖
 package = false
+
+# opencv-python 与 opencv-contrib-python 会互相覆盖 cv2 模块导致损坏，
+# 这里排除 paddleocr 传递依赖的 opencv-contrib-python，只保留 opencv-python。
+override-dependencies = [
+    "opencv-contrib-python; sys_platform == 'never'",
+]
 
 [tool.setuptools]
 # 项目为扁平脚本结构，无需要打包的 Python 包
