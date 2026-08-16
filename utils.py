@@ -14,15 +14,22 @@ def save_screenshot(image_path, data):
 
     company = data.get("公司", "未知公司").strip()
     base = data.get("base", "未知地点").strip()
-    job = data.get("投递志愿与顺序", "").strip()
     original_name = Path(image_path).name
 
-    name_parts = [company] if company and company != "未知公司" else []
+    def _sanitize_filename(text):
+        """替换文件名中的非法字符"""
+        invalid_chars = r'\/:*?"<>|'
+        for ch in invalid_chars:
+            text = text.replace(ch, "_")
+        return text
+
+    name_parts = (
+        [_sanitize_filename(company)] if company and company != "未知公司" else []
+    )
     if name_parts:
         if base and base != "未知地点":
-            name_parts.append(base)
-        if job:
-            name_parts.append(job)
+            name_parts.append(_sanitize_filename(base))
+
         new_name = "_".join(name_parts) + Path(image_path).suffix
     else:
         new_name = original_name

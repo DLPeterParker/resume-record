@@ -79,6 +79,11 @@ class App:
         # Excel 被占用时改为弹窗提示（而非阻塞在 input()）
         excel_handler.set_retry_prompt(self._excel_retry_prompt)
 
+        # API 配置变量：启动时从 config 模块读取当前值
+        self.api_key_var = tk.StringVar(value=config.OPENAI_API_KEY or "")
+        self.api_base_url_var = tk.StringVar(value=config.OPENAI_BASE_URL or "")
+        self.api_model_var = tk.StringVar(value=config.LLM_MODEL or "")
+
         self._build_ui()
         self._redirect_stdout()
 
@@ -103,6 +108,56 @@ class App:
         self.path_var = tk.StringVar(value="未选择文件")
         ttk.Label(toolbar, textvariable=self.path_var, foreground="#555").pack(
             side="left", padx=6
+        )
+
+        # API 设置面板
+        api_frame = ttk.LabelFrame(self.root, text="API 设置", padding=6)
+        api_frame.pack(side="top", fill="x", padx=8, pady=(0, 4))
+
+        ttk.Label(api_frame, text="Key:").pack(side="left", padx=(0, 4))
+        ttk.Entry(
+            api_frame, textvariable=self.api_key_var, width=30
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(api_frame, text="URL:").pack(side="left", padx=(4, 4))
+        ttk.Entry(
+            api_frame, textvariable=self.api_base_url_var, width=34
+        ).pack(side="left", padx=(0, 4))
+        ttk.Label(api_frame, text="Model:").pack(side="left", padx=(4, 4))
+        ttk.Entry(
+            api_frame, textvariable=self.api_model_var, width=16
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            api_frame, text="保存", command=self._save_api_settings
+        ).pack(side="left", padx=(4, 0))
+
+        # 先 pack 底部组件（log_frame 和 controls），再 pack 主区域（main）
+        # 这样窗口缩小时，main 区域会收缩而不是把底部组件挤出屏幕
+        log_frame = ttk.LabelFrame(self.root, text="日志", padding=6)
+        log_frame.pack(side="bottom", fill="x")
+        self.log_text = tk.Text(log_frame, height=9, state="disabled", wrap="word")
+        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        self.log_text.config(yscrollcommand=scroll.set)
+        self.log_text.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        controls = ttk.Frame(self.root, padding=8)
+        controls.pack(side="bottom", fill="x")
+        self.status_var = tk.StringVar(value="就绪")
+        ttk.Label(controls, textvariable=self.status_var, foreground="#0066cc").pack(
+            side="left", padx=6
+        )
+        ttk.Button(controls, text="上一张", command=lambda: self.nav(-1)).pack(
+            side="right", padx=4
+        )
+        ttk.Button(controls, text="下一张", command=lambda: self.nav(1)).pack(
+            side="right", padx=4
+        )
+        ttk.Button(controls, text="跳过", command=self.skip).pack(side="right", padx=4)
+        ttk.Button(controls, text="确认写入", command=self.confirm).pack(
+            side="right", padx=4
+        )
+        ttk.Button(controls, text="重新识别", command=self.reprocess).pack(
+            side="right", padx=4
         )
 
         main = ttk.Frame(self.root, padding=8)
@@ -136,34 +191,6 @@ class App:
                 )
             self.field_vars[field] = var
         right.columnconfigure(1, weight=1)
-
-        log_frame = ttk.LabelFrame(self.root, text="日志", padding=6)
-        log_frame.pack(side="bottom", fill="x")
-        self.log_text = tk.Text(log_frame, height=9, state="disabled", wrap="word")
-        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
-        self.log_text.config(yscrollcommand=scroll.set)
-        self.log_text.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-
-        controls = ttk.Frame(self.root, padding=8)
-        controls.pack(side="bottom", fill="x")
-        self.status_var = tk.StringVar(value="就绪")
-        ttk.Label(controls, textvariable=self.status_var, foreground="#0066cc").pack(
-            side="left", padx=6
-        )
-        ttk.Button(controls, text="上一张", command=lambda: self.nav(-1)).pack(
-            side="right", padx=4
-        )
-        ttk.Button(controls, text="下一张", command=lambda: self.nav(1)).pack(
-            side="right", padx=4
-        )
-        ttk.Button(controls, text="跳过", command=self.skip).pack(side="right", padx=4)
-        ttk.Button(controls, text="确认写入", command=self.confirm).pack(
-            side="right", padx=4
-        )
-        ttk.Button(controls, text="重新识别", command=self.reprocess).pack(
-            side="right", padx=4
-        )
 
     # ---------- 文件选择 ----------
 
@@ -355,6 +382,53 @@ class App:
         stream = _QueueStream(self.log_queue)
         sys.stdout = stream
         sys.stderr = stream
+
+    def _save_api_settings(self):
+        """保存 API 设置：更新 config 模块变量 + 写入 .env 文件。"""
+        # 1. 获取用户输入
+        api_key = self.api_key_var.get().strip()
+        api_base_url = self.api_base_url_var.get().strip()
+        api_model = self.api_model_var.get().strip()
+
+        # 2. 更新内存配置（config 模块变量，立即生效）
+        config.OPENAI_API_KEY = api_key
+        config.OPENAI_BASE_URL = api_base_url
+        config.LLM_MODEL = api_model
+
+        # 3. 读取现有 .env 文件
+        env_path = config.SCRIPT_DIR / ".env"
+        lines = []
+        if env_path.exists():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+
+        # 4. 逐行扫描替换
+        updated_keys = {"OPENAI_API_KEY": False, "OPENAI_BASE_URL": False, "LLM_MODEL": False}
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("OPENAI_API_KEY="):
+                new_lines.append(f"OPENAI_API_KEY={api_key}")
+                updated_keys["OPENAI_API_KEY"] = True
+            elif stripped.startswith("OPENAI_BASE_URL="):
+                new_lines.append(f"OPENAI_BASE_URL={api_base_url}")
+                updated_keys["OPENAI_BASE_URL"] = True
+            elif stripped.startswith("LLM_MODEL="):
+                new_lines.append(f"LLM_MODEL={api_model}")
+                updated_keys["LLM_MODEL"] = True
+            else:
+                new_lines.append(line)
+
+        # 5. 追加未匹配的 key + 写回文件
+        if not updated_keys["OPENAI_API_KEY"]:
+            new_lines.append(f"OPENAI_API_KEY={api_key}")
+        if not updated_keys["OPENAI_BASE_URL"]:
+            new_lines.append(f"OPENAI_BASE_URL={api_base_url}")
+        if not updated_keys["LLM_MODEL"]:
+            new_lines.append(f"LLM_MODEL={api_model}")
+
+        env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+        self._append_log("[OK] API 设置已保存，大模型提取已启用。")
 
     def _excel_retry_prompt(self, message):
         messagebox.showwarning(

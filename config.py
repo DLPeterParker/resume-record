@@ -1,10 +1,17 @@
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# 加载环境变量
-load_dotenv()
+# 数据目录：打包成 exe 后指向 exe 所在目录（可写、持久），否则指向源码目录
+if getattr(sys, "frozen", False):
+    SCRIPT_DIR = Path(sys.executable).resolve().parent
+else:
+    SCRIPT_DIR = Path(__file__).resolve().parent
+
+# 从数据目录加载 .env（打包后即 exe 旁）
+load_dotenv(SCRIPT_DIR / ".env")
 
 # 大模型配置
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -14,7 +21,6 @@ OPENAI_BASE_URL = os.getenv(
 LLM_MODEL = os.getenv("LLM_MODEL", "generalv3.5")  # 已适配讯飞星火默认名
 
 # 路径配置
-SCRIPT_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = SCRIPT_DIR / "简历投递记录.xlsx"
 
 OUTPUT_DIR = SCRIPT_DIR / "已归档截图"
@@ -35,7 +41,7 @@ COLUMNS = [
     "备注",
 ]
 PROGRESS_SHEET_NAME = "【附表】进度更新"
-PROGRESS_COLUMNS = ["事件标题", "投递记录", "公司", "岗位名称", "阶段", "日期", "备注"]
+PROGRESS_COLUMNS = ["事件标题", "公司", "岗位名称", "阶段", "日期", "备注"]
 
 # 交互式输入时的可选字段选项（控制台和 GUI 共用）
 FIELD_OPTIONS = {

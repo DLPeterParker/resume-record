@@ -1,7 +1,9 @@
 # extractor.py
 import json
 import re
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from openai import OpenAI
 from paddleocr import PaddleOCR
@@ -11,11 +13,29 @@ import config
 ocr_global = None
 
 
+def _model_dir(rel_path):
+    """打包后从内置目录读取 OCR 模型，源码运行时返回 None（走默认下载路径）。"""
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return str(base / "paddle_models" / rel_path)
+    return None
+
+
 def init_ocr():
     global ocr_global
     if ocr_global is None:
         print("[INIT] 正在初始化 OCR 引擎...")
-        ocr_global = PaddleOCR(text_det_box_thresh=0.3)
+        det_dir = _model_dir("det/ch_PP-OCRv4_det_infer")
+        rec_dir = _model_dir("rec/ch_PP-OCRv4_rec_infer")
+        if det_dir and rec_dir:
+            ocr_global = PaddleOCR(
+                text_det_box_thresh=0.3,
+                det_model_dir=det_dir,
+                rec_model_dir=rec_dir,
+                use_angle_cls=False,
+            )
+        else:
+            ocr_global = PaddleOCR(text_det_box_thresh=0.3)
         print("[OK] OCR 引擎初始化成功")
     return ocr_global
 
@@ -39,9 +59,7 @@ def call_llm_extract(ocr_text: str) -> dict:
         print("[WARN] API_KEY 未设置，LLM 提取已禁用")
         return {}
 
-    client = OpenAI(
-        api_key=config.OPENAI_API_KEY, base_url=config.OPENAI_BASE_URL
-    )
+    client = OpenAI(api_key=config.OPENAI_API_KEY, base_url=config.OPENAI_BASE_URL)
 
     # 优化后的 System Prompt：严禁输出数组和字典
     system_prompt = """
@@ -53,13 +71,17 @@ def call_llm_extract(ocr_text: str) -> dict:
 3. JSON 中的所有 value 必须是纯字符串（String），绝对不能是数组（Array）或对象（Object）。如果有多个城市或岗位，请使用逗号拼接字符串（例如："武汉,北京"、"算法工程师,产品经理"）。
 
 JSON 字段定义如下：
-- "公司": 公司全称或常用简称。
+【简洁原则】
+- 所有字段只提取最核心信息，不要冗余描述。
+- 不同字段之间不要重复相同内容。
+- 不要添加""或者{}等额外的标点符号。
+- "公司": 公司简称（如：字节、腾讯、vivo，去掉"有限公司""科技"等后缀，只保留品牌名）。
 - "base": 工作城市（如：北京、上海、远程，去除“工作地点：”等字样）。
-- "行业": 所属行业（如：互联网、智能制造等，无法判断留空）。
-- "平台": 招聘渠道（如：BOSS直聘、官网，无法判断留空）。
-- "批次": 招聘批次（如：2027届秋招、日常实习，无法判断留空）。
-- "投递志愿与顺序": 投递的具体岗位名称（多个岗位用逗号拼接，严禁使用JSON数组）。
-- "备注": 学历要求、经验要求、当前状态或其他重要限制。
+- "行业": 所属行业（如：互联网、智能制造等，无法判断默认互联网）。
+- "平台": 招聘渠道（如：BOSS直聘、官网，无法判断默认官网）。
+- "批次": 招聘批次（如：秋招、提前批，无法判断默认秋招）。
+- "投递志愿与顺序": 投递的岗位名称简称（多个岗位用逗号拼接，严禁使用JSON数组）。
+- "备注": 仅记录其他字段未覆盖的关键信息（如：需笔试、有测评），不要重复已有字段的内容。
 
 若某个字段在文本中完全无法找到或推理出，对应的值请设为空字符串 ""。
 """

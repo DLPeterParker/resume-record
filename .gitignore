@@ -27,6 +27,13 @@ wheels/
 .vscode/
 .idea/
 
+# Claude Code 本地配置
+.claude/
+
+# 过程产物（不上传）
+简历自动归档助手.spec
+方案和执行计划.md
+
 # OS
 .DS_Store
 Thumbs.db

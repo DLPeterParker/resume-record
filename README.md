@@ -2,65 +2,92 @@
 
 ## 概述
 
-这是一个基于 OCR 与大模型（LLM）技术的简历投递记录自动归档工具[cite: 4]。通过对招聘软件的岗位详情进行截图，系统会自动提取纯文本，调用大模型精准结构化解析（如公司名、城市、岗位等），并自动查重、更新到 Excel 表格中，最后对截图进行重命名归档[cite: 4]。
+这是一个基于 OCR 与大模型（LLM）技术的简历投递记录自动归档工具。通过对招聘软件的岗位详情进行截图，系统会自动提取纯文本，调用大模型精准结构化解析（如公司名、城市、岗位等），并自动查重、更新到 Excel 表格中，最后对截图进行重命名归档。
 
 ## 环境要求
 
-- **Python 3.10**（必须为 3.10 以保证 PaddlePaddle 的完美兼容）[cite: 4]
-- Windows 10/11[cite: 4]
-- 需配置大模型 API 密钥（默认支持讯飞星辰 MaaS，或其他 OpenAI 兼容接口）[cite: 4]
+- Windows 10/11
+- [uv](https://docs.astral.sh/uv/)（一键安装，见下文；Python 3.10 由 uv 自动准备，无需手动安装）
+- 需配置大模型 API 密钥（默认支持讯飞星辰 MaaS，或其他 OpenAI 兼容接口）
 
-## 快速开始
+## 快速开始（新手照着做即可）
 
-### 1. 首次安装与环境配置
+本项目用 [uv](https://docs.astral.sh/uv/) 锁定依赖版本（PaddleOCR 2.8.1 / PaddlePaddle 2.6.2），避免版本升级导致运行报错。下面 4 步照着做即可，Python 环境由 uv 自动准备，无需手动安装。
 
-```bash
-# 创建 Python 3.10 虚拟环境
-uv venv .venv --python 3.10
+### 第 1 步：安装 uv
 
-# 激活虚拟环境
-.venv\Scripts\activate
+**打开命令行**：按键盘 `Win` 键 → 输入 `PowerShell` → 回车。
 
-# 安装核心依赖
-uv pip install paddlepaddle==2.6.2 paddleocr==2.8.1 openpyxl python-dotenv openai
+把下面这行粘贴进去回车，即可安装 uv：
 
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### 2. 配置环境变量
+> 装完**关掉窗口重新打开**，输入 `uv --version` 能看到版本号即安装成功。
+> 也可用 `pip install uv` 安装。
 
-在项目根目录下创建一个 `.env` 文件，填入你的大模型接口配置（以讯飞星辰 MaaS 为例）：
+### 第 2 步：一键安装依赖
 
-```env
-OPENAI_API_KEY=你的API_Password
-OPENAI_BASE_URL=[https://maas-coding-api.cn-huabei-1.xf-yun.com/v2](https://maas-coding-api.cn-huabei-1.xf-yun.com/v2)
-LLM_MODEL=astron-code-latest
+在命令行里 `cd` 进入本项目目录（把路径换成你 clone 下来的实际位置）：
 
+```powershell
+cd D:\你的路径\resume-record
 ```
 
-### 3. 使用脚本
+然后执行这一行，自动创建虚拟环境并安装锁定版本的所有依赖：
 
-系统已重构为模块化架构，入口文件现为 `main.py`。建议在项目根目录新建 `简历投递记录/` 文件夹用于存放日常投递截图。
+```powershell
+uv sync
+```
+
+> uv 会按 `.python-version` 自动准备 Python 3.10，并安装 `uv.lock` 里锁定的版本，保证和作者环境完全一致。首次运行会下载 PaddleOCR 模型（约 18MB），耐心等待。
+
+### 第 3 步：启动图形界面
+
+```powershell
+uv run python app_gui.py
+```
+
+### 第 4 步：填写 API 密钥
+
+在界面顶部「API 设置」栏填写你的大模型接口（以讯飞星辰 MaaS 为例）：
+
+| 栏位 | 填写内容 |
+| --- | --- |
+| Key | 你的 API_Password |
+| URL | https://maas-coding-api.cn-huabei-1.xf-yun.com/v2 |
+| Model | astron-code-latest |
+
+点「保存」即可，无需手动改任何文件。之后选择截图或文件夹 → 自动 OCR + 识别 → 核对字段 → 点「确认写入」，即可自动写入 Excel 并归档截图。
+
+> 支持任何 OpenAI 兼容接口（通义千问、DeepSeek 等），只需填对应的 URL 和 Model 即可。
+> 也可以手动在项目根目录建 `.env` 文件（复制 `.env.example` 改名后填写），两种方式等效。
+
+---
+
+## 进阶：命令行模式
+
+入口文件为 `main.py`。建议在项目根目录新建 `简历投递记录/` 文件夹存放日常投递截图。
 
 #### 批量全自动模式（推荐工作流）
 
 ```bash
-# 批量处理目录下的所有截图，处理完后自动移动至“已归档截图”目录
-python main.py --batch ./简历投递记录/
+# 批量处理目录下所有截图，处理完自动移动至「已归档截图」
+uv run python main.py --batch ./简历投递记录/
 
-# 批量预览（显示识别结果但不写入Excel，不移动文件）
-python main.py --batch ./简历投递记录/ --dry-run
-
+# 批量预览（只显示识别结果，不写入 Excel、不移动文件）
+uv run python main.py --batch ./简历投递记录/ --dry-run
 ```
 
 #### 单文件模式
 
 ```bash
-# 全自动模式：大模型提取 + 确认步骤
-python main.py 简历投递记录/截图.png --auto
+# 全自动：大模型提取 + 确认步骤
+uv run python main.py 简历投递记录/截图.png --auto
 
-# 手动交互式模式：完全不调用大模型，手动输入所有字段
-python main.py 简历投递记录/截图.png
-
+# 手动交互式：不调用大模型，手动输入所有字段
+uv run python main.py 简历投递记录/截图.png
 ```
 
 ## 核心功能特性
@@ -136,11 +163,11 @@ python main.py 简历投递记录/截图.png
 
 ## 注意事项
 
-1. 首次运行会下载 PaddleOCR 基础模型（约 200MB），需要耐心等待
+1. 首次运行会下载 PaddleOCR 基础模型（PP-OCRv4 检测+识别，约 18MB），需要耐心等待
 
 
 2. 截图应尽量清晰，包含完整的公司名、地点与岗位信息
 
 
-3. 确保 `.env` 中的大模型 API 余额/额度充足，若接口调用失败将自动切入纯手动输入模式。
+3. 确保你的大模型 API 余额/额度充足，若接口调用失败将自动切入纯手动输入模式。
 

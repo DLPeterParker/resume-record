@@ -18,8 +18,24 @@ def _prompt_retry(message):
     return _retry_prompt(message)
 
 
+def ensure_excel():
+    """Excel 数据文件不存在时，自动创建带表头的工作簿（主表 + 附表）。"""
+    if config.EXCEL_PATH.exists():
+        return
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "简历投递记录"
+    ws.append(config.COLUMNS)
+    ps = wb.create_sheet(config.PROGRESS_SHEET_NAME)
+    ps.append(config.PROGRESS_COLUMNS)
+    wb.save(config.EXCEL_PATH)
+    wb.close()
+    print("[OK] 已自动创建 Excel 数据文件")
+
+
 def update_excel(data):
     print("\n[EXCEL] 正在打开文件...")
+    ensure_excel()
     wb = openpyxl.load_workbook(config.EXCEL_PATH)
     ws = wb.active
 
@@ -59,9 +75,9 @@ def _find_progress_record(company, job_name, stage):
     ws = wb[config.PROGRESS_SHEET_NAME]
     for row_idx in range(2, ws.max_row + 1):
         if (
-            ws.cell(row_idx, 3).value == company
-            and ws.cell(row_idx, 4).value == job_name
-            and ws.cell(row_idx, 5).value == stage
+            ws.cell(row_idx, 2).value == company
+            and ws.cell(row_idx, 3).value == job_name
+            and ws.cell(row_idx, 4).value == stage
         ):
             wb.close()
             return row_idx, True
@@ -86,16 +102,16 @@ def update_progress_sheet(data, is_new=True):
         ws = wb[config.PROGRESS_SHEET_NAME]
 
         if found:
-            ws.cell(row_idx, 6).value = date_val
+            ws.cell(row_idx, 5).value = date_val
             print(f"[UPDATE] 附表已更新记录: {company} - {job_name} - {stage}")
         else:
             new_row = ws.max_row + 1
             event_title = (
-                f"新增投递：{company}-{job_name}"
+                f"投递 | {company} | {job_name}"
                 if is_new
-                else f"进度变更：{company}-{job_name} → {stage}"
+                else f"{stage} | {company} | {job_name}"
             )
-            row_data = [event_title, "", company, job_name, stage, date_val, ""]
+            row_data = [event_title, company, job_name, stage, date_val, ""]
             for col_idx, val in enumerate(row_data, 1):
                 ws.cell(new_row, col_idx).value = val
             print(f"[NEW] 附表新增记录: {company} - {job_name} - {stage}")
